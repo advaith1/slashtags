@@ -1,0 +1,5 @@
+debug.log
+node_modules
+out
+firebase.json
+config.json
