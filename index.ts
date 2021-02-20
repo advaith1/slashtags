@@ -1,7 +1,8 @@
 import * as Discord from 'discord.js'
-import { APIApplicationCommand, APIInteraction, APIInteractionApplicationCommandCallbackData, APIInteractionResponseType, RESTGetAPIApplicationGuildCommandsResult, RESTPostAPIApplicationCommandsJSONBody } from 'discord-api-types/v8'
+import { APIApplicationCommand, APIInteraction, APIInteractionApplicationCommandCallbackData, APIInteractionResponseType, APIMessage, RESTGetAPIApplicationGuildCommandsResult, RESTPostAPIApplicationCommandsJSONBody } from 'discord-api-types/v8'
 import db from './firestore'
 import { firestore } from 'firebase-admin'
+import { stripIndent } from 'common-tags'
 
 import { commandIDs, token } from './config.json'
 import { check, no } from './emoji.json'
@@ -28,7 +29,7 @@ const client = new Client({
     messageCacheMaxSize: 0,
     restTimeOffset: 100,
     ws: {
-        intents: ['GUILDS', 'GUILD_MESSAGES']
+        intents: ['GUILDS']
     }
 })
 
@@ -54,25 +55,26 @@ client.ws.on('INTERACTION_CREATE', async (interaction: APIInteraction) => {
     if (interaction.data.id === commandIDs.ping) {
         await respond({content: 'Ping!'})
         const start = Discord.SnowflakeUtil.deconstruct(interaction.id).timestamp
-        const end = Discord.SnowflakeUtil.deconstruct((client.channels.cache.get(interaction.channel_id) as Discord.TextChannel).lastMessageID).timestamp
+        const end = await client.api.webhooks(client.user.id, interaction.token).messages('@original').patch({data: {}}).then((m: APIMessage) => new Date(m.timestamp).getTime())
         const edit = (text: string) => client.api.webhooks(client.user.id, interaction.token).messages('@original').patch({data: {content: text}})
         edit(`🏓 Pong! Took **${end - start}**ms.`)
 
     } else if (interaction.data.id === commandIDs.help) {
         respond({
-            content: 'Slashtags is a simple [slash command](https://support.discord.com/hc/en-us/articles/1500000368501) tag bot.\n'+
-                     '• Use /create to create a tag, /edit to edit a tag, and /delete to delete a tag.\n'+
-                     '• All created tags will show when a user types /, making them easy to discover.\n'+
-                     '• The Manage Server permission is required to manage tags.\n'+
-                     '• Due to Discord limits, you can create up to 50 Slashtags per server. Slash commands do not show in servers with over 50 bots.\n'+
-                     'Created by [advaith](https://advaith.io) • [Add to your server](https://discord.com/api/oauth2/authorize?client_id=790910161953882147&scope=bot+applications.commands) • [Privacy Policy](https://gist.github.com/advaith1/6fd1ad3ed1ad30304ba97528f5561935)'
+            content: stripIndent`
+                Slashtags is a simple [slash command](https://support.discord.com/hc/en-us/articles/1500000368501) tag bot.
+                • Use /create to create a tag, /edit to edit a tag, and /delete to delete a tag.
+                • All created tags will show when a user types /, making them easy to discover.
+                • The Manage Server permission is required to manage tags.
+                • Due to Discord limits, you can create up to 50 Slashtags per server. Slash commands do not show in servers with over 50 bots.
+                Created by [advaith](https://advaith.io) • [Add to your server](https://discord.com/api/oauth2/authorize?client_id=790910161953882147&scope=bot+applications.commands) • [Privacy Policy](https://gist.github.com/advaith1/6fd1ad3ed1ad30304ba97528f5561935)`
         })
 
     } else if (interaction.data.id === commandIDs.create) {
         if (!permissions.has('MANAGE_GUILD'))
             return respond({content: no+'you do not have the Manage Server permission'})
-        if (!/^[\w-]{3,32}$/.test(option('name')))
-            return respond({content: no+"name is invalid: must be 3 to 32 characters and can't contain spaces"})
+        if (!/^[\w-]{1,32}$/.test(option('name')))
+            return respond({content: no+"name is invalid: must be 1 to 32 characters and can't contain spaces"})
         if (!option('description') || option('description').length > 100)
             return respond({content: no+'description must be 1 to 100 characters'})
         if (!option('content') || option('content').length > 2000)
@@ -103,8 +105,8 @@ client.ws.on('INTERACTION_CREATE', async (interaction: APIInteraction) => {
             return respond({content: no+'you do not have the Manage Server permission'})
         if (!option('name') && !option('description') && !option('content'))
             return respond({content: no+"you didn't provide any new data!"})
-        if (!/^[\w-]{3,32}$/.test(option('newname')))
-            return respond({content: no+"newname is invalid: must be 3 to 32 characters and can't contain spaces"})
+        if (!/^[\w-]{1,32}$/.test(option('newname')))
+            return respond({content: no+"newname is invalid: must be 1 to 32 characters and can't contain spaces"})
         if (option('description') && option('description').length > 100)
             return respond({content: no+'description must be 1 to 100 characters'})
         if (option('content') && option('content').length > 2000)

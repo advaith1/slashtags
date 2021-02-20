@@ -1,7 +1,9 @@
 {
     "dependencies": {
-        "discord-api-types": "github:advaith1/discord-api-types#interaction-member-permissions",
+        "@types/common-tags": "^1.8.0",
+        "common-tags": "^1.8.0",
+        "discord-api-types": "^0.12.1",
         "discord.js": "^12.5.1",
-        "firebase-admin": "^9.4.2"
+        "firebase-admin": "^9.5.0"
     }
 }

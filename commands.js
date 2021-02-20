@@ -14,7 +14,7 @@ const create = {
     options: [
         {
             name: 'name',
-            description: 'The name of the Slashtag (3-32 characters)',
+            description: 'The name of the Slashtag (1-32 characters)',
             type: 3,
             required: true
         },
@@ -45,7 +45,7 @@ const edit = {
         },
         {
             name: 'newname',
-            description: 'The new name of this Slashtag (3-32 characters)',
+            description: 'The new name of this Slashtag (1-32 characters)',
             type: 3
         },
         {
