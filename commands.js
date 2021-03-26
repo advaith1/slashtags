@@ -29,6 +29,11 @@ const create = {
             description: 'The text to respond to this Slashtag with (1-2000 characters)',
             type: 3,
             required: true
+        },
+        {
+            name: 'ephemeral',
+            description: 'Whether this Slashtag response should only be visible to the command user (default false)',
+            type: 5
         }
     ]
 }
@@ -57,6 +62,11 @@ const edit = {
             name: 'content',
             description: 'The new text to respond to this Slashtag with (1-2000 characters)',
             type: 3
+        },
+        {
+            name: 'ephemeral',
+            description: 'Whether this Slashtag response should only be visible to the command user',
+            type: 5
         }
     ]
 }

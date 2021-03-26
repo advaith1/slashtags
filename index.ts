@@ -66,7 +66,7 @@ client.ws.on('INTERACTION_CREATE', async (interaction: APIInteraction) => {
                 • Use /create to create a tag, /edit to edit a tag, and /delete to delete a tag.
                 • All created tags will show when a user types /, making them easy to discover.
                 • The Manage Server permission is required to manage tags.
-                • Due to Discord limits, you can create up to 100 (formerly 50) Slashtags per server. Slash commands do not show in servers with over 50 bots.
+                • Due to Discord limits, you can create up to 100 Slashtags per server. Slash commands may not show in servers with over 50 bots.
                 Created by [advaith](https://advaith.io) • [Add to your server](https://discord.com/api/oauth2/authorize?client_id=790910161953882147&scope=bot+applications.commands) • [Privacy Policy](https://gist.github.com/advaith1/6fd1ad3ed1ad30304ba97528f5561935)`
         })
 
@@ -91,7 +91,8 @@ client.ws.on('INTERACTION_CREATE', async (interaction: APIInteraction) => {
 
         await db.collection('guilds').doc(interaction.guild_id).set({
             [command.id]: {
-                content: option('content')
+                content: option('content'),
+                ephemeral: option('ephemeral')
             }
         }, { merge: true }).catch(e => {
             error = true
@@ -118,7 +119,7 @@ client.ws.on('INTERACTION_CREATE', async (interaction: APIInteraction) => {
             respond({content: no+`error: ${e}`, allowed_mentions: {parse: []}})
         }) as RESTGetAPIApplicationGuildCommandsResult
         const command = commands.find(c => c.name === option('name'))
-        if (!command) return respond({content: no+'command not found'})
+        if (!command) return respond({content: no+`command "${option('name')}" not found`, allowed_mentions: {parse: []}})
 
         if (option('name') || option('description'))
             await client.api.applications(client.user.id).guilds(interaction.guild_id).commands(command.id).patch({data: {
@@ -131,7 +132,8 @@ client.ws.on('INTERACTION_CREATE', async (interaction: APIInteraction) => {
         if (option('content'))
             await db.collection('guilds').doc(interaction.guild_id).update({
                 [command.id]: {
-                    content: option('content')
+                    content: option('content'),
+                    ephemeral: option('ephemeral')
                 }
             }).catch(e => {
                 error = true
@@ -149,7 +151,7 @@ client.ws.on('INTERACTION_CREATE', async (interaction: APIInteraction) => {
             respond({content: no+`error: ${e}`, allowed_mentions: {parse: []}})
         }) as RESTGetAPIApplicationGuildCommandsResult
         const command = commands.find(c => c.name === option('name'))
-        if (!command) return respond({content: no+'command not found'})
+        if (!command) return respond({content: no+`command "${option('name')}" not found`, allowed_mentions: {parse: []}})
 
         await client.api.applications(client.user.id).guilds(interaction.guild_id).commands(command.id).delete().catch((e: Discord.DiscordAPIError) => {
             error = true
@@ -166,7 +168,11 @@ client.ws.on('INTERACTION_CREATE', async (interaction: APIInteraction) => {
     
     } else {
         const doc = await db.collection('guilds').doc(interaction.guild_id).get()
-        respond({content: doc.data()[interaction.data.id]?.content, allowed_mentions: {parse: []}})
+        const tag = doc.data()[interaction.data.id] as {
+            content: string
+            ephemeral?: boolean
+        }
+        respond({content: tag?.content, flags: tag?.ephemeral ? 1 << 6 : 0, allowed_mentions: {parse: []}})
             .catch((e: Discord.DiscordAPIError) =>
                 new Discord.WebhookClient(client.user.id, interaction.token).send(no+`error: ${e}`, {allowedMentions: {parse: []}}))
     }
