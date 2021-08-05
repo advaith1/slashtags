@@ -1,5 +1,5 @@
 import * as Discord from 'discord.js'
-import { APIApplicationCommand, APIInteraction, APIInteractionApplicationCommandCallbackData, APIInteractionResponseType, APIMessage, RESTGetAPIApplicationGuildCommandsResult, RESTPostAPIApplicationCommandsJSONBody } from 'discord-api-types/v8'
+import { APIApplicationCommand, APIInteractionResponseCallbackData, InteractionResponseType, APIMessage, RESTGetAPIApplicationGuildCommandsResult, RESTPostAPIApplicationCommandsJSONBody, APIApplicationCommandInteraction, APIApplicationCommandInteractionDataOptionWithValues } from 'discord-api-types/v8'
 import db from './firestore'
 import { firestore } from 'firebase-admin'
 import { stripIndent } from 'common-tags'
@@ -45,12 +45,12 @@ client.on('ready', async () => {
 })
 
 // @ts-expect-error
-client.ws.on('INTERACTION_CREATE', async (interaction: APIInteraction) => {
+client.ws.on('INTERACTION_CREATE', async (interaction: APIApplicationCommandInteraction) => {
     const permissions = new Discord.Permissions(Number(interaction.member.permissions))
-    const respond = (data: APIInteractionApplicationCommandCallbackData) =>
+    const respond = (data: APIInteractionResponseCallbackData) =>
         client.api.interactions(interaction.id, interaction.token).callback
-            .post({data: {type: APIInteractionResponseType.ChannelMessageWithSource, data}})
-    const option = (name: string) => interaction.data.options.find(o => o.name === name)?.value as string
+            .post({data: {type: InteractionResponseType.ChannelMessageWithSource, data}})
+    const option = (name: string) => (interaction.data.options.find(o => o.name === name) as APIApplicationCommandInteractionDataOptionWithValues)?.value as string
 
     if (interaction.data.id === commandIDs.ping) {
         await respond({content: 'Ping!'})
@@ -129,13 +129,13 @@ client.ws.on('INTERACTION_CREATE', async (interaction: APIInteraction) => {
                 error = true
                 respond({content: no+`error: ${e}`, allowed_mentions: {parse: []}})
             })
-        if (option('content'))
-            await db.collection('guilds').doc(interaction.guild_id).update({
+        if (option('content') || option('ephemeral') !== undefined)
+            await db.collection('guilds').doc(interaction.guild_id).set({
                 [command.id]: {
                     content: option('content'),
                     ephemeral: option('ephemeral')
                 }
-            }).catch(e => {
+            }, { merge: true }).catch(e => {
                 error = true
                 respond({content: no+`error: ${e}`, allowed_mentions: {parse: []}})
             })
