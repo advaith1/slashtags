@@ -1,5 +1,5 @@
-import * as Discord from 'discord.js'
-import { APIApplicationCommand, APIInteractionResponseCallbackData, InteractionResponseType, APIMessage, RESTGetAPIApplicationGuildCommandsResult, RESTPostAPIApplicationCommandsJSONBody, APIApplicationCommandInteraction, APIApplicationCommandInteractionDataOptionWithValues } from 'discord-api-types/v8'
+import Discord, { Options } from 'discord.js'
+import { APIApplicationCommand, APIInteractionResponseCallbackData, InteractionResponseType, APIMessage, RESTGetAPIApplicationGuildCommandsResult, RESTPostAPIApplicationCommandsJSONBody, APIChatInputApplicationCommandInteraction, APIApplicationCommandInteractionDataOptionWithValues } from 'discord-api-types/v9'
 import db from './firestore'
 import { firestore } from 'firebase-admin'
 import { stripIndent } from 'common-tags'
@@ -26,11 +26,24 @@ class Client extends Discord.Client {
 }
 
 const client = new Client({
-    messageCacheMaxSize: 0,
-    restTimeOffset: 100,
-    ws: {
-        intents: ['GUILDS']
-    }
+    makeCache: Options.cacheWithLimits({
+        ...Options.defaultMakeCacheSettings,
+        // @ts-expect-error
+        GuildEmojiManager: 0,
+        GuildStickerManager: 0,
+        MessageManager: 0,
+        StageInstanceManager: 0,
+        ThreadManager: 0,
+        UserManager: 0,
+        VoiceStateManager: 0,
+        GuildMemberManager: {
+            maxSize: 1,
+            keepOverLimit: m => m.id === m.client.user.id
+        }
+    }),
+    restTimeOffset: 50,
+    restGlobalRateLimit: 50,
+    intents: ['GUILDS']
 })
 
 client.on('ready', async () => {
@@ -44,15 +57,29 @@ client.on('ready', async () => {
     , 300000)
 })
 
-// @ts-expect-error
-client.ws.on('INTERACTION_CREATE', async (interaction: APIApplicationCommandInteraction) => {
-    const permissions = new Discord.Permissions(Number(interaction.member.permissions))
+client.ws.on('INTERACTION_CREATE', async (interaction: APIChatInputApplicationCommandInteraction) => {
+    const guild = client.guilds.cache.get(interaction.guild_id)
+    const permissions = new Discord.Permissions(BigInt(interaction.member.permissions))
     const respond = (data: APIInteractionResponseCallbackData) =>
         client.api.interactions(interaction.id, interaction.token).callback
             .post({data: {type: InteractionResponseType.ChannelMessageWithSource, data}})
     const option = (name: string) => (interaction.data.options.find(o => o.name === name) as APIApplicationCommandInteractionDataOptionWithValues)?.value as string
 
-    if (interaction.data.id === commandIDs.ping) {
+    // @ts-ignore
+    if (interaction.type === 4) { // autocomplete
+        if (guild.commands.cache.size === 0) await guild.commands.fetch()
+
+        client.api.interactions(interaction.id, interaction.token).callback.post({data: {
+            type: 8,
+            data: {
+                choices: guild.commands.cache
+                    .filter(c => c.name.startsWith(option('name')))
+                    .map(c => ({name: c.name, value: c.name}))
+                    .slice(0, 25)
+            }
+        }})
+
+    } else if (interaction.data.id === commandIDs.ping) {
         await respond({content: 'Ping!'})
         const start = Discord.SnowflakeUtil.deconstruct(interaction.id).timestamp
         const end = await client.api.webhooks(client.user.id, interaction.token).messages('@original').patch({data: {}}).then((m: APIMessage) => new Date(m.timestamp).getTime())
@@ -81,15 +108,15 @@ client.ws.on('INTERACTION_CREATE', async (interaction: APIApplicationCommandInte
             return respond({content: no+'content must be 1 to 2000 characters'})
 
         let error = false
-        const command = await client.api.applications(client.user.id).guilds(interaction.guild_id).commands.post({data: {
+        const command = await guild.commands.create({
             name: option('name'),
             description: option('description')
-        } as RESTPostAPIApplicationCommandsJSONBody }).catch((e: Discord.DiscordAPIError) => {
+        }).catch((e: Discord.DiscordAPIError) => {
             error = true
             respond({content: no+`error: ${e}`, allowed_mentions: {parse: []}})
-        }) as APIApplicationCommand
+        })
 
-        await db.collection('guilds').doc(interaction.guild_id).set({
+        if (command) await db.collection('guilds').doc(interaction.guild_id).set({
             [command.id]: {
                 content: option('content'),
                 ephemeral: option('ephemeral')
@@ -114,21 +141,24 @@ client.ws.on('INTERACTION_CREATE', async (interaction: APIApplicationCommandInte
             return respond({content: no+'content must be 1 to 2000 characters'})
 
         let error = false
-        const commands = await client.api.applications(client.user.id).guilds(interaction.guild_id).commands.get().catch((e: Discord.DiscordAPIError) => {
+        const commands = await guild.commands.fetch().catch((e: Discord.DiscordAPIError) => {
             error = true
             respond({content: no+`error: ${e}`, allowed_mentions: {parse: []}})
-        }) as RESTGetAPIApplicationGuildCommandsResult
+        })
+        if (!commands) return
+
         const command = commands.find(c => c.name === option('name'))
         if (!command) return respond({content: no+`command "${option('name')}" not found`, allowed_mentions: {parse: []}})
 
         if (option('name') || option('description'))
-            await client.api.applications(client.user.id).guilds(interaction.guild_id).commands(command.id).patch({data: {
+            await command.edit({
                 name: option('newname'),
                 description: option('description')
-            }}).catch((e: Discord.DiscordAPIError) => {
+            }).catch((e: Discord.DiscordAPIError) => {
                 error = true
                 respond({content: no+`error: ${e}`, allowed_mentions: {parse: []}})
             })
+            guild.commands.fetch() // workaround because d.js doesn't update the cache
         if (option('content') || option('ephemeral') !== undefined)
             await db.collection('guilds').doc(interaction.guild_id).set({
                 [command.id]: {
@@ -146,17 +176,20 @@ client.ws.on('INTERACTION_CREATE', async (interaction: APIApplicationCommandInte
         if (!permissions.has('MANAGE_GUILD')) return respond({content: no+'you do not have the Manage Server permission'})
 
         let error = false
-        const commands = await client.api.applications(client.user.id).guilds(interaction.guild_id).commands.get().catch((e: Discord.DiscordAPIError) => {
-            error = true
-            respond({content: no+`error: ${e}`, allowed_mentions: {parse: []}})
-        }) as RESTGetAPIApplicationGuildCommandsResult
-        const command = commands.find(c => c.name === option('name'))
-        if (!command) return respond({content: no+`command "${option('name')}" not found`, allowed_mentions: {parse: []}})
-
-        await client.api.applications(client.user.id).guilds(interaction.guild_id).commands(command.id).delete().catch((e: Discord.DiscordAPIError) => {
+        const commands = await guild.commands.fetch().catch((e: Discord.DiscordAPIError) => {
             error = true
             respond({content: no+`error: ${e}`, allowed_mentions: {parse: []}})
         })
+        if (!commands) return
+
+        const command = commands.find(c => c.name === option('name'))
+        if (!command) return respond({content: no+`command "${option('name')}" not found`, allowed_mentions: {parse: []}})
+
+        await command.delete().catch((e: Discord.DiscordAPIError) => {
+            error = true
+            respond({content: no+`error: ${e}`, allowed_mentions: {parse: []}})
+        })
+        guild.commands.cache.delete(command.id) // workaround because d.js doesn't update the cache
         await db.collection('guilds').doc(interaction.guild_id).update({
             [command.id]: firestore.FieldValue.delete()
         }).catch(e => {
@@ -174,7 +207,7 @@ client.ws.on('INTERACTION_CREATE', async (interaction: APIApplicationCommandInte
         }
         respond({content: tag?.content, flags: tag?.ephemeral ? 1 << 6 : 0, allowed_mentions: {parse: []}})
             .catch((e: Discord.DiscordAPIError) =>
-                new Discord.WebhookClient(client.user.id, interaction.token).send(no+`error: ${e}`, {allowedMentions: {parse: []}}))
+                new Discord.WebhookClient({id: client.user.id, token: interaction.token}).send({content: no+`error: ${e}`, allowedMentions: {parse: []}}))
     }
 
 })

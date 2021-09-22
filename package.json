@@ -2,8 +2,11 @@
     "dependencies": {
         "@types/common-tags": "^1.8.1",
         "common-tags": "^1.8.0",
-        "discord-api-types": "^0.22.0",
-        "discord.js": "^12.5.3",
-        "firebase-admin": "^9.11.0"
+        "discord-api-types": "^0.23.1",
+        "discord.js": "^13.1.0",
+        "firebase-admin": "^9.11.1"
+    },
+    "volta": {
+        "node": "16.9.1"
     }
 }
