@@ -6,4 +6,4 @@ RUN curl -L https://unpkg.com/@pnpm/self-installer | node
 RUN pnpm i
 RUN pnpm i -g typescript typescript-transpile-only
 RUN tsc-transpile-only
-CMD ["pnpm", "start"]
+CMD ["node", "out"]
