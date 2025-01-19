@@ -1,4 +1,4 @@
-FROM node:16-alpine
+FROM node:18-alpine
 WORKDIR /app
 COPY . .
 RUN apk update && apk add build-base curl
