@@ -89,7 +89,7 @@ client.ws.on('INTERACTION_CREATE', async (interaction: APIChatInputApplicationCo
     } else if (interaction.data.id === commandIDs.help) {
         respond({
             content: stripIndent`
-                Slashtags is a simple [slash command](<https://support.discord.com/hc/en-us/articles/1500000368501>) tag bot.
+                Slashtags is a simple [slash command](<https://support-apps.discord.com/hc/en-us/articles/26501837786775>) tag bot.
                 * Use /create to create a tag, /edit to edit a tag, and /delete to delete a tag.
                 * All created tags will show when a user types /, making them easy to discover.
                 * The Manage Server permission is required to manage tags.
